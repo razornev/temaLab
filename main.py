@@ -48,16 +48,6 @@ for fileName in y:
     #x.append(cv2.cvtColor(cv2.imread("./reducedTrainSet/"+brand+"/"+origFileName), cv2.COLOR_BGR2GRAY))
     x.append(cv2.imread("./reducedTrainSet/" + brand + "/" + origFileName))
 
-print("elements:")
-for element in x[0]:
-    print(element)
-
-'''
-x = np.array(x)
-x.reshape((150, 2122, 4209, 3))
-'''
-
-
 x = np.array(x)
 y = np.array(y)
 
