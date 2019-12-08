@@ -1,43 +1,78 @@
-from keras.layers import Conv2D, Dense, Flatten, MaxPool2D, LeakyReLU
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.layers import Conv2D, Dense, Flatten, MaxPool2D, LeakyReLU, Dropout, AvgPool2D
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.losses import categorical_crossentropy
-from DataGenerator import DataGenerator
-import cv2
-import numpy as np
+from keras.optimizers import Adam, SGD, RMSprop
+import pickle
 
-
-# 261 mercedes 0-260 idx    train:240   test:21
-# 168 toyota 0-169 idx      train:150   test:18
-# 131 volvo 0-130 idx       train:120   test:11
-# 560 - 50  = 510
+input_shape = 500
 
 model = Sequential([
-    Conv2D(8, (100, 100), strides=8, padding="valid", input_shape=(2122, 4209, 3), activation='relu'),
-    Conv2D(8, (30, 30), strides=8, padding="valid", activation='relu'),
-    MaxPool2D(pool_size=(3, 3)),
+    Conv2D(64, (3, 3), padding="same", input_shape=(input_shape, input_shape, 3), activation="relu"),
+    Conv2D(128, (3, 3), padding="same", activation="relu"),
     MaxPool2D(pool_size=(2, 2)),
+
+    Conv2D(128, (3, 3), padding="same", activation="relu"),
+    Conv2D(128, (3, 3), padding="same", activation="relu"),
+    Conv2D(128, (3, 3), padding="same", activation="relu"),
+    MaxPool2D(pool_size=(2, 2)),
+
+    Conv2D(256, (3, 3), padding="same", activation="relu"),
+    Conv2D(256, (3, 3), padding="same", activation="relu"),
+    Conv2D(256, (3, 3), padding="same", activation="relu"),
+    MaxPool2D(pool_size=(2, 2)),
+
+    Conv2D(512, (3, 3), padding="same", activation="relu"),
+    Conv2D(512, (3, 3), padding="same", activation="relu"),
+    Conv2D(512, (3, 3), padding="same", activation="relu"),
+    MaxPool2D(pool_size=(2, 2)),
+
     Flatten(),
-    Dense(30, activation='relu'),
-    Dense(3, activation='softmax')
+
+    Dense(512, activation="relu"),
+
+    Dense(512, activation="relu"),
+    Dropout(0.2),
+
+    Dense(3, activation="softmax")
 ])
 
-model.compile("adam", categorical_crossentropy, [categorical_crossentropy])
+model.compile(RMSprop(lr=1e-5), categorical_crossentropy, ["accuracy"])
 
-labels = np.load("./data/validationDictionary.npy", allow_pickle=True).item()
+train_datagen = ImageDataGenerator(
+    rescale=1. / 255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True)
 
-print(labels)
+train_datagen = train_datagen.flow_from_directory(
+    'data/train',
+    target_size=(input_shape, input_shape),
+    batch_size=2,
+    class_mode='categorical')
 
-list_IDs = np.arange(0, labels.__len__(), 1)
+validation_datagen = ImageDataGenerator(
+    rescale=1. / 255
+)
 
-'''for i in range(0, len(list_IDs)) :
-    list_IDs[i] = str(list_IDs[i])
-'''
+validation_datagen = validation_datagen.flow_from_directory(
+    'data/newValid',
+    target_size=(input_shape, input_shape),
+    batch_size=2,
+    class_mode='categorical')
 
-model.fit_generator(DataGenerator(list_IDs, labels, n_classes=3), epochs=10)
+for i in range(0, 100):
+    mc = ModelCheckpoint('best_model_' + str(i) + '.h5', monitor='val_acc', mode='max', verbose=1, save_best_only=True)
 
+    history = model.fit_generator(train_datagen, validation_data=validation_datagen, epochs=2, callbacks=[mc])
 
-'''
-sources:
-https://stanford.edu/~shervine/blog/keras-how-to-generate-data-on-the-fly#data-generator
-'''
+    model_json = model.to_json()
+    with open("./content/networks/vmmrdb_lger_ep" + str(i * 2) + ".json", "w") as json_file:
+        json_file.write(model_json)
+    # serialize weights to HDF5
+    model.save_weights("./content/networks/vmmrdb_lger_ep" + str(i * 2) + ".h5")
+    # print("Saved model to disk")
+
+    with open('/trainHistoryDict' + str(i), 'wb') as file_pi:
+        pickle.dump(history.history, file_pi)
